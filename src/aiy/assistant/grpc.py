@@ -38,6 +38,9 @@ import logging
 import math
 import os
 import sys
+import json
+import concurrent.futures
+import time
 
 os.environ['GRPC_POLL_STRATEGY'] = 'epoll1'
 import google.auth.transport.grpc
@@ -47,7 +50,7 @@ import google.oauth2.credentials
 from google.assistant.embedded.v1alpha2 import embedded_assistant_pb2
 from google.assistant.embedded.v1alpha2 import embedded_assistant_pb2_grpc
 
-from aiy.assistant import auth_helpers, device_helpers
+from aiy.assistant import auth_helpers, device_helpers, action_helpers
 from aiy.board import Led
 from aiy.voice.audio import AudioFormat, Recorder, BytesPlayer
 
@@ -114,6 +117,21 @@ class AssistantServiceClient:
             device_model_id=device_model_id,
             device_id=device_id)
 
+        device_handler = action_helpers.DeviceRequestHandler(device_id)
+        self._device_handler = device_handler
+
+        @device_handler.command('com.example.commands.BlinkLight')
+        def blink(speed, number):
+            logging.info('Blinking device %s times.' % number)
+            delay = 1
+            if speed == "SLOWLY":
+                delay = 2
+            elif speed == "QUICKLY":
+                delay = 0.5
+            for i in range(int(number)):
+                logging.info('Device is blinking.')
+                time.sleep(delay)
+
     @property
     def volume_percentage(self):
         """
@@ -164,6 +182,7 @@ class AssistantServiceClient:
 
     def _assist(self, recorder, play, deadline):
         continue_conversation = False
+        device_actions_futures = []
 
         for response in self._assistant.Assist(self._requests(recorder), deadline):
             if response.event_type == END_OF_UTTERANCE:
@@ -202,6 +221,17 @@ class AssistantServiceClient:
             elif microphone_mode == CLOSE_MICROPHONE:
                 continue_conversation = False
                 logger.info('Not expecting follow-on query from user.')
+            if response.device_action.device_request_json:
+                device_request = json.loads(
+                    response.device_action.device_request_json
+                )
+                fs = self._device_handler(device_request)
+                if fs:
+                    device_actions_futures.extend(fs)
+
+        if len(device_actions_futures):
+            logging.info('Waiting for device executions to complete.')
+            concurrent.futures.wait(device_actions_futures)
 
         return continue_conversation
 

@@ -322,8 +322,8 @@ else:
     Led = SingleColorLed
 
 
-BUTTON_PIN = 23
-LED_PIN = 25
+BUTTON_PIN = 5
+LED_PIN = 6
 
 class Board:
     """An interface for the connected AIY board."""
