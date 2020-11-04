@@ -20,7 +20,9 @@ import locale
 import logging
 import signal
 import sys
+import time
 
+from aiy.assistant import auth_helpers, device_helpers, action_helpers
 from aiy.assistant.grpc import AssistantServiceClientWithLed
 from aiy.board import Board
 
@@ -43,10 +45,27 @@ def main():
     parser.add_argument('--volume', type=volume, default=100)
     args = parser.parse_args()
 
+    credentials = auth_helpers.get_assistant_credentials()
+    device_model_id, device_id = device_helpers.get_ids_for_service(credentials)
+    device_handler = action_helpers.DeviceRequestHandler(device_id)
+
+    @device_handler.command('com.example.commands.BlinkLight')
+    def blink(speed, number):
+        logging.info('Blinking device %s times.' % number)
+        delay = 1
+        if speed == "SLOWLY":
+            delay = 2
+        elif speed == "QUICKLY":
+            delay = 0.5
+        for i in range(int(number)):
+            logging.info('다섯번 깜빡여')
+            time.sleep(delay)
+
     with Board() as board:
         assistant = AssistantServiceClientWithLed(board=board,
                                                   volume_percentage=args.volume,
-                                                  language_code=args.language)
+                                                  language_code=args.language,
+                                                  device_handler=device_handler)
         while True:
             logging.info('Press button to start conversation...')
             board.button.wait_for_press()
