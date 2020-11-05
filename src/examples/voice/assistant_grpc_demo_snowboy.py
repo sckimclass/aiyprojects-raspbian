@@ -52,17 +52,13 @@ def main():
     device_model_id, device_id = device_helpers.get_ids_for_service(credentials)
     device_handler = action_helpers.DeviceRequestHandler(device_id)
 
-    @device_handler.command('com.example.commands.BlinkLight')
-    def blink(speed, number):
-        logging.info('Blinking device %s times.' % number)
-        delay = 1
-        if speed == "SLOWLY":
-            delay = 2
-        elif speed == "QUICKLY":
-            delay = 0.5
-        for i in range(int(number)):
-            logging.info('다섯번 깜빡여')
-            time.sleep(delay)
+    @device_handler.command('com.example.commands.OnOff')
+    def onoff(on):
+        if on == "on":
+            logging.info('Power on')
+        elif on == "off":
+            logging.info('Power off')
+
     with Board() as board:
         assistant = AssistantServiceClientWithLed(board=board,
                                                   volume_percentage=args.volume,

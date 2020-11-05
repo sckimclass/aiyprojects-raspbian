@@ -40,7 +40,6 @@ import os
 import sys
 import json
 import concurrent.futures
-import time
 
 os.environ['GRPC_POLL_STRATEGY'] = 'epoll1'
 import google.auth.transport.grpc
@@ -50,7 +49,7 @@ import google.oauth2.credentials
 from google.assistant.embedded.v1alpha2 import embedded_assistant_pb2
 from google.assistant.embedded.v1alpha2 import embedded_assistant_pb2_grpc
 
-from aiy.assistant import auth_helpers, device_helpers, action_helpers
+from aiy.assistant import auth_helpers, device_helpers
 from aiy.board import Led
 from aiy.voice.audio import AudioFormat, Recorder, BytesPlayer
 
@@ -88,10 +87,11 @@ class AssistantServiceClient:
         volume_percentage: Volume level of the audio output. Valid values are 1 to 100
             (corresponding to 1% to 100%).
     """
-    def __init__(self, language_code='en-US', volume_percentage=100):
+    def __init__(self, language_code='en-US', volume_percentage=100, device_handler=None):
         self._volume_percentage = volume_percentage  # Mutable state.
         self._conversation_state = None              # Mutable state.
         self._language_code = language_code
+        self._device_handler = device_handler
 
         ##
         credentials = auth_helpers.get_assistant_credentials()
@@ -116,21 +116,6 @@ class AssistantServiceClient:
         self._device_config = embedded_assistant_pb2.DeviceConfig(
             device_model_id=device_model_id,
             device_id=device_id)
-
-        device_handler = action_helpers.DeviceRequestHandler(device_id)
-        self._device_handler = device_handler
-
-        @device_handler.command('com.example.commands.BlinkLight')
-        def blink(speed, number):
-            logging.info('Blinking device %s times.' % number)
-            delay = 1
-            if speed == "SLOWLY":
-                delay = 2
-            elif speed == "QUICKLY":
-                delay = 0.5
-            for i in range(int(number)):
-                logging.info('Device is blinking.')
-                time.sleep(delay)
 
     @property
     def volume_percentage(self):
@@ -222,12 +207,13 @@ class AssistantServiceClient:
                 continue_conversation = False
                 logger.info('Not expecting follow-on query from user.')
             if response.device_action.device_request_json:
-                device_request = json.loads(
-                    response.device_action.device_request_json
-                )
-                fs = self._device_handler(device_request)
-                if fs:
-                    device_actions_futures.extend(fs)
+                if self._device_handler is not None:
+                    device_request = json.loads(
+                        response.device_action.device_request_json
+                    )
+                    fs = self._device_handler(device_request)
+                    if fs:
+                        device_actions_futures.extend(fs)
 
         if len(device_actions_futures):
             logging.info('Waiting for device executions to complete.')
@@ -284,8 +270,8 @@ class AssistantServiceClientWithLed(AssistantServiceClient):
         self._board.led.state = state
         self._board.led.brightness = brightness
 
-    def __init__(self, board, language_code='en-US', volume_percentage=100):
-        super().__init__(language_code, volume_percentage)
+    def __init__(self, board, language_code='en-US', volume_percentage=100, device_handler=None):
+        super().__init__(language_code, volume_percentage, device_handler)
 
         self._board = board
         self._update_led(Led.ON, 0.1)
