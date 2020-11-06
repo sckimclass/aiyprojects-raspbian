@@ -26,6 +26,9 @@ from aiy.assistant import auth_helpers, device_helpers, action_helpers
 from aiy.assistant.grpc import AssistantServiceClientWithLed
 from aiy.board import Board
 
+import RPi.GPIO as GPIO
+import time
+
 def volume(string):
     value = int(string)
     if value < 0 or value > 100:
@@ -49,12 +52,22 @@ def main():
     device_model_id, device_id = device_helpers.get_ids_for_service(credentials)
     device_handler = action_helpers.DeviceRequestHandler(device_id)
 
+    GPIO.setmode(GPIO.BCM)
+    LED = 17
+    GPIO.setup(LED, GPIO.OUT, initial=GPIO.LOW)
+
     @device_handler.command('com.example.commands.OnOff')
     def onoff(on):
         if on == "on":
             logging.info('Power on')
+            GPIO.output(LED, GPIO.HIGH)
         elif on == "off":
             logging.info('Power off')
+            GPIO.output(LED, GPIO.LOW)
+            time.sleep(0.5)
+            GPIO.output(LED, GPIO.HIGH)
+            time.sleep(0.5)
+            GPIO.output(LED, GPIO.LOW)
 
     with Board() as board:
         assistant = AssistantServiceClientWithLed(board=board,
@@ -66,6 +79,8 @@ def main():
             board.button.wait_for_press()
             logging.info('Conversation started!')
             assistant.conversation()
+
+    GPIO.cleanup(LED)
 
 if __name__ == '__main__':
     main()
